@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+*.tgz
+
+# Runtime artifacts
+reports/
+*.log
+workspace/
+potassiumMCP/
+
+# IPC directories (created at runtime by dispatcher)
+ipc_in/
+ipc_out/
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editor (keep .vscode/ and .cursor/ — they contain MCP configs)
+.idea/
+*.swp
+*.swo
+*~
+
+# Gemini/AI artifacts
+.gemini/

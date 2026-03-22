@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "PotassiumMCP": {
+      "command": "node",
+      "args": ["bridge/src/mcp-server.js"],
+      "env": {
+        "EXECUTOR_WORKSPACE": ""
+      }
+    }
+  }
+}
