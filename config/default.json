@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "safety": {
+    "max_calls_per_second": 10,
+    "blocked_remote_patterns": [
+      "*Purchase*",
+      "*Payment*",
+      "*Ban*",
+      "*Kick*",
+      "*Admin*",
+      "*Moderate*",
+      "*Delete*"
+    ],
+    "destructive_operations_enabled": false,
+    "confirm_destructive": true,
+    "max_fuzz_calls": 50,
+    "target_self_only": true
+  },
+  "ipc": {
+    "transport": "file",
+    "poll_interval_ms": 250,
+    "timeout_ms": 10000,
+    "file_paths": {
+      "agent_out": "potassiumMCP/out",
+      "agent_in": "potassiumMCP/in",
+      "archive": "potassiumMCP/archive"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "persist_to_file": true,
+    "log_directory": "potassiumMCP/logs",
+    "include_params_in_log": true
+  },
+  "agent": {
+    "version": "0.1.0",
+    "auto_cleanup_processed_files": true,
+    "max_decompile_size_chars": 50000,
+    "max_search_results": 50
+  }
+}

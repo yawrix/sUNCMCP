@@ -1,0 +1,20 @@
+{
+  "name": "potassiummcp",
+  "version": "1.0.0",
+  "description": "AI-powered Roblox game security toolkit — 21 MCP tools for recon, decompilation, exploitation, and testing",
+  "type": "module",
+  "main": "src/mcp-server.js",
+  "scripts": {
+    "mcp": "node src/mcp-server.js",
+    "start": "node src/mcp-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["roblox", "mcp", "security", "pentest", "potassium"],
+  "license": "MIT"
+}
