@@ -55,40 +55,9 @@ async function main() {
     }
   }
 
-  // Step 2: Get workspace path from user
-  header('Step 2: Executor workspace');
-  log('PotassiumMCP needs to know where your executor reads/writes files.');
-  log('This is your executor\'s workspace or filesystem directory.');
-  log('');
-  log('To find it: open your executor → Settings → look for');
-  log('"workspace", "filesystem", or "files" directory.');
-  log('');
-
-  let workspace = await ask('  Paste the full path here: ');
-  workspace = workspace.trim().replace(/"/g, '');
-
-  if (!workspace) {
-    fail('No path provided.');
-    log('You can set EXECUTOR_WORKSPACE manually in your MCP config later.');
-    rl.close();
-    process.exit(1);
-  }
-
-  if (!existsSync(workspace)) {
-    fail(`That path doesn't exist: ${workspace}`);
-    log('');
-    log('Double-check the path and run setup.js again,');
-    log('or set EXECUTOR_WORKSPACE manually in your MCP config.');
-    rl.close();
-    process.exit(1);
-  }
-
-  success(`Workspace: ${workspace}`);
-
-  // Step 3: Generate editor configs
-  header('Step 3: Editor config');
+  // Step 2: Generate editor configs
+  header('Step 2: Editor config');
   const serverPath = resolve(join(PROJECT_ROOT, 'bridge', 'src', 'mcp-server.js'));
-  const escapedWorkspace = workspace.replace(/\\/g, '\\\\');
   const escapedServer = serverPath.replace(/\\/g, '\\\\');
 
   // VS Code config
@@ -100,10 +69,7 @@ async function main() {
       PotassiumMCP: {
         type: 'stdio',
         command: 'node',
-        args: [serverPath],
-        env: {
-          EXECUTOR_WORKSPACE: workspace
-        }
+        args: [serverPath]
       }
     }
   };
@@ -119,10 +85,7 @@ async function main() {
     mcpServers: {
       PotassiumMCP: {
         command: 'node',
-        args: [serverPath],
-        env: {
-          EXECUTOR_WORKSPACE: workspace
-        }
+        args: [serverPath]
       }
     }
   };
@@ -131,7 +94,7 @@ async function main() {
   success('Created .cursor/mcp.json (Cursor)');
 
   // Show config for other editors
-  header('Step 4: Done!');
+  header('Step 3: Done!');
   console.log('');
   log('VS Code / Copilot → configured automatically');
   log('Cursor            → configured automatically');
@@ -142,10 +105,7 @@ async function main() {
   console.log(`  {`);
   console.log(`    "PotassiumMCP": {`);
   console.log(`      "command": "node",`);
-  console.log(`      "args": ["${escapedServer}"],`);
-  console.log(`      "env": {`);
-  console.log(`        "EXECUTOR_WORKSPACE": "${escapedWorkspace}"`);
-  console.log(`      }`);
+  console.log(`      "args": ["${escapedServer}"]`);
   console.log(`    }`);
   console.log(`  }`);
   console.log('');

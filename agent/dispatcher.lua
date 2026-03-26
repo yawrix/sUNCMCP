@@ -1,29 +1,18 @@
---[[
-  PotassiumMCP — In-Game Agent v1.0.0
-  https://github.com/yawrix/PotassiumMCP
-  
-  Runs inside Roblox via Potassium (or any sUNC executor).
-  Connects to your AI assistant through the MCP server.
-  
-  USAGE:
-  1. Join your target game in Roblox
-  2. Paste this script into your executor and run it
-  3. Talk to your AI — it now has full access to the game
-  
-  STOP: getgenv()._pmcp_stop = true
-]]
+-- Generate unique client ID: PlayerName_PlaceId_random4hex
+local function generate_client_id()
+    local player = game:GetService("Players").LocalPlayer
+    local name = player and player.Name or "Unknown"
+    local placeId = game.PlaceId or 0
+    local hex = string.format("%04x", math.random(0, 65535))
+    return name .. "_" .. tostring(placeId) .. "_" .. hex
+end
 
--- ============================================================================
--- Configuration
--- ============================================================================
+local CLIENT_ID = generate_client_id()
 
 local CONFIG = {
-    VERSION = "1.0.0",
-    BASE_DIR = "potassiumMCP",
-    IN_DIR = "potassiumMCP/in",
-    OUT_DIR = "potassiumMCP/out",
-    LOG_DIR = "potassiumMCP/logs",
-    POLL_INTERVAL = 0.25,
+    VERSION = "1.2.0",
+    CLIENT_ID = CLIENT_ID,
+    WS_URL = "ws://localhost:38741",
     MAX_LOG_ENTRIES = 500,
 }
 
@@ -187,6 +176,26 @@ end
 -- Utility helpers
 -- ============================================================================
 
+local IGNORED_NAMES = {
+    ["CoreGui"] = true,
+    ["CorePackages"] = true,
+    ["NetworkClient"] = true,
+    ["RobloxPluginGuiService"] = true,
+    ["RobloxReplicatedStorage"] = true,
+}
+
+local function is_ignored(inst)
+    local ok, res = pcall(function()
+        local curr = inst
+        while curr and curr ~= game do
+            if IGNORED_NAMES[curr.Name] then return true end
+            curr = curr.Parent
+        end
+        return false
+    end)
+    return ok and res or false
+end
+
 local function safe(fn)
     local ok, result = pcall(fn)
     return ok and result or nil
@@ -274,6 +283,7 @@ function tools.scan_remotes(params)
         pcall(function()
             for _, obj in ipairs(root:GetDescendants()) do
                 if seen[obj] then continue end
+                if is_ignored(obj) then continue end
                 seen[obj] = true
                 local class = safe(function() return obj.ClassName end)
                 local name = safe(function() return obj.Name end) or "?"
@@ -301,6 +311,7 @@ function tools.scan_remotes(params)
     pcall(function()
         for _, obj in ipairs(getnilinstances()) do
             if seen[obj] then continue end
+            if is_ignored(obj) then continue end
             seen[obj] = true
             local class = safe(function() return obj.ClassName end)
             local name = safe(function() return obj.Name end) or "?"
@@ -446,6 +457,7 @@ function tools.search_scripts(params)
         for _, root in ipairs(roots) do
             pcall(function()
                 for _, obj in ipairs(root:GetDescendants()) do
+                    if is_ignored(obj) then continue end
                     if obj:IsA("LuaSourceContainer") then table.insert(scripts_list, obj) end
                 end
             end)
@@ -457,6 +469,7 @@ function tools.search_scripts(params)
     
     for _, script in ipairs(scripts_list) do
         if #results.scripts >= max_results then break end
+        if is_ignored(script) then continue end
         
         local class = safe(function() return script.ClassName end)
         if class_filter ~= "all" and class ~= class_filter then continue end
@@ -1154,6 +1167,7 @@ function tools.find_instances(params)
     local start = os.clock()
     
     local function matches(obj)
+        if is_ignored(obj) then return false end
         if name_pattern then
             local name = safe(function() return obj.Name end)
             if not name or not name:match(name_pattern) then return false end
@@ -1511,19 +1525,18 @@ function tools.execute_lua(params)
 end
 
 -- ============================================================================
--- IPC: File-based message loop
+-- IPC: WebSocket Message Loop
 -- ============================================================================
 
-local function ensure_dirs()
-    for _, dir in ipairs({CONFIG.BASE_DIR, CONFIG.IN_DIR, CONFIG.OUT_DIR, CONFIG.LOG_DIR}) do
-        if not isfolder(dir) then makefolder(dir) end
-    end
-end
+local ws_connection = nil
 
 local function send_response(request_id, method, result, err)
+    if not ws_connection then return end
+    
     local envelope = {
-        version = "1.0",
+        version = "1.2",
         request_id = request_id,
+        client_id = CONFIG.CLIENT_ID,
         timestamp = timestamp(),
         type = err and "error" or "response",
         method = method,
@@ -1535,8 +1548,9 @@ local function send_response(request_id, method, result, err)
         envelope.result = result
     end
     
-    local filename = CONFIG.OUT_DIR .. "/" .. tostring(os.time()) .. "_" .. request_id .. ".json"
-    writefile(filename, json_encode(envelope))
+    pcall(function()
+        ws_connection:Send(json_encode(envelope))
+    end)
 end
 
 local function process_request(request)
@@ -1553,64 +1567,90 @@ local function process_request(request)
         return
     end
     
-    local ok, result, err = pcall(function()
-        return tool_fn(params)
-    end)
-    
-    if not ok then
-        -- pcall error
-        log("error", method, "Tool error: " .. tostring(result))
-        send_response(request_id, method, nil, tostring(result))
-    elseif err then
-        -- Tool returned an error
-        log("warn", method, "Tool returned error: " .. err)
-        send_response(request_id, method, nil, err)
-    else
-        log("info", method, "Completed successfully")
-        send_response(request_id, method, result, nil)
-    end
-end
-
-local function poll_once()
-    if not isfolder(CONFIG.IN_DIR) then return end
-    
-    local files = {}
-    pcall(function() files = listfiles(CONFIG.IN_DIR) end)
-    
-    for _, filepath in ipairs(files) do
-        if not filepath:match("%.json$") then continue end
+    -- Run tool in background
+    task.spawn(function()
+        local ok, result, err = pcall(function()
+            return tool_fn(params)
+        end)
         
-        local ok, content = pcall(function() return readfile(filepath) end)
-        if not ok then continue end
-        
-        -- Delete the file immediately to avoid re-processing
-        pcall(function() delfile(filepath) end)
-        
-        -- Parse and process
-        local parse_ok, request = pcall(function() return json_decode(content) end)
-        if not parse_ok or not request then
-            log("error", "ipc", "Failed to parse request file: " .. filepath)
-            continue
+        if not ok then
+            log("error", method, "Tool error: " .. tostring(result))
+            send_response(request_id, method, nil, tostring(result))
+        elseif err then
+            log("warn", method, "Tool returned error: " .. err)
+            send_response(request_id, method, nil, err)
+        else
+            log("info", method, "Completed successfully")
+            send_response(request_id, method, result, nil)
         end
-        
-        process_request(request)
+    end)
+end
+
+local function connect_websocket()
+    local game_name = safe(function() return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name end) or "Unknown Game"
+    local player = game:GetService("Players").LocalPlayer
+
+    local ok, ws = pcall(function()
+        return WebSocket.connect(CONFIG.WS_URL)
+    end)
+
+    if not ok or not ws then
+        log("error", "ipc", "Failed to connect to WebSocket at " .. CONFIG.WS_URL)
+        return false
     end
+
+    ws_connection = ws
+
+    -- Send registration
+    local reg_msg = {
+        type = "register",
+        client_id = CONFIG.CLIENT_ID,
+        player_name = player and player.Name or "Unknown",
+        display_name = player and safe(function() return player.DisplayName end) or nil,
+        version = CONFIG.VERSION,
+        started_at = timestamp(),
+        game_id = safe(function() return game.GameId end),
+        place_id = safe(function() return game.PlaceId end),
+        game_name = game_name,
+    }
+    
+    ws:Send(json_encode(reg_msg))
+
+    ws.OnMessage:Connect(function(message)
+        local parse_ok, request = pcall(function() return json_decode(message) end)
+        if not parse_ok or not request then
+            log("error", "ipc", "Failed to parse incoming WebSocket message")
+            return
+        end
+        process_request(request)
+    end)
+
+    ws.OnClose:Connect(function()
+        log("warn", "ipc", "WebSocket closed")
+        ws_connection = nil
+    end)
+
+    return true
 end
 
 -- ============================================================================
--- Main loop
+-- Main entry
 -- ============================================================================
 
--- Prevent multiple instances
 if getgenv()._pmcp_running then
     warn("[potassium] Already running — run getgenv()._pmcp_stop = true first")
     return
 end
 
+-- Attempt to connect immediately. If it fails, give up (bridge should be running first)
+if not connect_websocket() then
+    warn("[potassium] Ensure your AI editor's MCP server is running first, then re-execute this script.")
+    return
+end
+
 getgenv()._pmcp_running = true
 getgenv()._pmcp_stop = false
-
-ensure_dirs()
+getgenv()._pmcp_client_id = CONFIG.CLIENT_ID
 
 local game_name = safe(function() return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name end) or "Unknown Game"
 
@@ -1618,7 +1658,9 @@ print("")
 print(" ╔══════════════════════════════════════════╗")
 print(" ║       ⚗️ PotassiumMCP v" .. CONFIG.VERSION .. "              ║")
 print(" ╠══════════════════════════════════════════╣")
+print(" ║  Transport: WebSocket (38741)            ║")
 print(" ║  Status:  Connected                      ║")
+print(" ║  Client:  " .. CONFIG.CLIENT_ID:sub(1, 29) .. string.rep(" ", math.max(0, 29 - #CONFIG.CLIENT_ID:sub(1, 29))) .. "  ║")
 print(" ║  Game:    " .. game_name:sub(1, 29) .. string.rep(" ", math.max(0, 29 - #game_name:sub(1, 29))) .. "  ║")
 print(" ║  Tools:   21 loaded                      ║")
 print(" ╠══════════════════════════════════════════╣")
@@ -1627,34 +1669,26 @@ print(" ║  Stop: getgenv()._pmcp_stop = true       ║")
 print(" ╚══════════════════════════════════════════╝")
 print("")
 
-log("info", "agent", "Connected — waiting for commands")
+log("info", "agent", "Connected as " .. CONFIG.CLIENT_ID .. " — waiting for commands via WebSocket")
 
--- Write status so the bridge knows we're alive
-pcall(function()
-    writefile(CONFIG.BASE_DIR .. "/agent_status.json", json_encode({
-        status = "running",
-        version = CONFIG.VERSION,
-        started_at = timestamp(),
-        game_id = safe(function() return game.GameId end),
-        place_id = safe(function() return game.PlaceId end),
-    }))
-end)
-
--- Main loop
+-- Keep alive loop
 while not getgenv()._pmcp_stop do
-    poll_once()
-    task.wait(CONFIG.POLL_INTERVAL)
+    task.wait(1)
+    if not ws_connection then
+        log("info", "agent", "WebSocket dropped. Attempting reconnect in 5 seconds...")
+        task.wait(4)
+        if not getgenv()._pmcp_stop then
+            connect_websocket()
+        end
+    end
 end
 
 -- Cleanup
 getgenv()._pmcp_running = false
-log("info", "agent", "Disconnected")
-print("[potassium] Disconnected.")
+if ws_connection then
+    pcall(function() ws_connection:Close() end)
+    ws_connection = nil
+end
 
-pcall(function()
-    writefile(CONFIG.BASE_DIR .. "/agent_status.json", json_encode({
-        status = "stopped",
-        version = CONFIG.VERSION,
-        stopped_at = timestamp(),
-    }))
-end)
+log("info", "agent", "Disconnected (" .. CONFIG.CLIENT_ID .. ")")
+print("[potassium] Disconnected (" .. CONFIG.CLIENT_ID .. ").")

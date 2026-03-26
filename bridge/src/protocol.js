@@ -55,6 +55,9 @@ export const Tools = [
   'fire_signal',
   'fuzz_remote',
   'execute_lua',
+  // Multi-client tools
+  'list_clients',
+  'broadcast_lua',
 ];
 
 // ── Envelope helpers ───────────────────────────────────────────
@@ -65,15 +68,17 @@ export const Tools = [
  * @param {object} params - Tool parameters
  * @returns {object} Request envelope
  */
-export function createRequest(method, params = {}) {
-  return {
-    version: '1.0',
+export function createRequest(method, params = {}, clientId = null) {
+  const envelope = {
+    version: '1.1',
     request_id: randomUUID(),
     timestamp: new Date().toISOString(),
     type: MessageType.REQUEST,
     method,
     params,
   };
+  if (clientId) envelope.client_id = clientId;
+  return envelope;
 }
 
 /**

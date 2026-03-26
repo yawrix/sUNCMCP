@@ -2,29 +2,16 @@
   "version": "1.0.0",
   "safety": {
     "max_calls_per_second": 10,
-    "blocked_remote_patterns": [
-      "*Purchase*",
-      "*Payment*",
-      "*Ban*",
-      "*Kick*",
-      "*Admin*",
-      "*Moderate*",
-      "*Delete*"
-    ],
-    "destructive_operations_enabled": false,
+    "blocked_remote_patterns": [],
+    "destructive_operations_enabled": true,
     "confirm_destructive": true,
     "max_fuzz_calls": 50,
     "target_self_only": true
   },
   "ipc": {
-    "transport": "file",
-    "poll_interval_ms": 250,
+    "transport": "websocket",
     "timeout_ms": 10000,
-    "file_paths": {
-      "agent_out": "potassiumMCP/out",
-      "agent_in": "potassiumMCP/in",
-      "archive": "potassiumMCP/archive"
-    }
+    "ws_port": 38741
   },
   "logging": {
     "level": "info",

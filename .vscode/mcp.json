@@ -3,10 +3,9 @@
     "PotassiumMCP": {
       "type": "stdio",
       "command": "node",
-      "args": ["${workspaceFolder}/bridge/src/mcp-server.js"],
-      "env": {
-        "EXECUTOR_WORKSPACE": "${userHome}/Documents/Potassium/workspace"
-      }
+      "args": [
+        "c:\\Users\\devdo\\Desktop\\potassiumMCP\\bridge\\src\\mcp-server.js"
+      ]
     }
   }
 }

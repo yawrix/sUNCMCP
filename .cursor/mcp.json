@@ -2,10 +2,9 @@
   "mcpServers": {
     "PotassiumMCP": {
       "command": "node",
-      "args": ["bridge/src/mcp-server.js"],
-      "env": {
-        "EXECUTOR_WORKSPACE": ""
-      }
+      "args": [
+        "c:\\Users\\devdo\\Desktop\\potassiumMCP\\bridge\\src\\mcp-server.js"
+      ]
     }
   }
 }
