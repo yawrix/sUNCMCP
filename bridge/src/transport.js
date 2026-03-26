@@ -106,6 +106,18 @@ export class MultiClientTransport extends EventEmitter {
       });
     });
 
+    this._httpServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`\n[FATAL] Port ${this.port} is already in use.`);
+        console.error(`[FATAL] This usually means another AI editor (or another instance of this MCP server) is already running and holding the WebSocket open.`);
+        console.error(`[FATAL] Close other AI editors, or manually kill stray 'node.exe' processes in your task manager to force-release the port.\n`);
+        process.exit(1);
+      } else {
+        console.error(`[FATAL] HTTP server error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
     this._httpServer.listen(this.port, '127.0.0.1', () => {
       this.emit('started', { port: this.port });
     });
