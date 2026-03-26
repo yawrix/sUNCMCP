@@ -757,11 +757,25 @@ function tools.spy_remotes(params)
                     arg_preview = {},
                 }
                 
-                for i, arg in ipairs(args) do
-                    entry.arg_types[i] = typeof(arg)
-                    local preview = tostring(arg)
-                    if #preview > 100 then preview = preview:sub(1, 100) .. "..." end
-                    entry.arg_preview[i] = preview
+                local function safe_tostring(val)
+                    local ok, str = pcall(function()
+                        if type(val) == "userdata" then
+                            return typeof(val) .. "(" .. tostring(val) .. ")"
+                        elseif type(val) == "table" then
+                            return "table: " .. tostring(val)
+                        end
+                        return tostring(val)
+                    end)
+                    return ok and str or typeof(val)
+                end
+                
+                for i = 1, #args do
+                    entry.arg_types[i] = typeof(args[i])
+                    if i <= 5 then -- Only preview up to 5 arguments
+                        local preview_str = safe_tostring(args[i])
+                        if #preview_str > 100 then preview_str = preview_str:sub(1, 100) .. "..." end
+                        table.insert(entry.arg_preview, preview_str)
+                    end
                 end
                 
                 -- Get call stack
